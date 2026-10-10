@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="author" content="Muhammad Abid Hakim">
+<meta name="theme-color" content="#0b0b0b">
+<title>Birthday Surprise</title>
+<!-- Created by Muhammad Abid Hakim -->
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Hind+Siliguri:wght@600&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;height:100%;background:#0b0b0b;color:#fff;overflow:hidden;
+    font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans Bengali',sans-serif;
+    -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+    -webkit-user-select:none;user-select:none}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  h1{font-size:18px;font-weight:600;margin:0 0 8px}
+  canvas{display:block;width:300px;height:345px;border-radius:6px}
+  p{font-size:12px;opacity:.5;margin:8px 0 0}
+  button{margin-top:8px;cursor:pointer;padding:9px 18px;border:0;border-radius:20px;background:#ff6f9c;color:#fff;
+    font-size:14px;font-weight:600;font-family:inherit}
+</style>
+</head>
+<body>
+<h1>Birthday Surprise</h1>
+<canvas id="c"></canvas>
+<button id="mb">🔊 মিউজিক চালু করো</button>
+<p>আবার দেখতে অ্যানিমেশনে ট্যাপ করো</p>
+<script>
+// লিংকের শেষে ?name=Rahim&msg=শুভ জন্মদিন দিলে নাম/বার্তা বদলে যাবে (না দিলে নিচের ডিফল্ট)
+const P=new URLSearchParams(location.search);
+const NAME=(P.get('name')||'Sadia').slice(0,18);
+const MSG=(P.get('msg')||'তোমার দিনটা সুন্দর কাটুক').slice(0,42);
+if(document.fonts){document.fonts.load("20px 'Great Vibes'");document.fonts.load("600 17px 'Hind Siliguri'");}
+const W=400,H=460,TOTAL=12.5;
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+function fit(){   // যেকোনো স্ক্রিনে ঠিক মাপে বসে (ফোন/ট্যাবলেট/পিসি, পোর্ট্রেট/ল্যান্ডস্কেপ)
+  const vw=window.innerWidth||document.documentElement.clientWidth,
+        vh=window.innerHeight||document.documentElement.clientHeight;
+  const cw=Math.max(180,Math.min(vw*.96,(vh-125)*W/H,520)),ch=cw*H/W;
+  cv.style.width=cw+'px';cv.style.height=ch+'px';
+  const r=Math.min(window.devicePixelRatio||1,2);   // হাই-ডিপিআই ফোনে ল্যাগ কমাতে ২-এ সীমা
+  cv.width=Math.round(cw*r);cv.height=Math.round(ch*r);
+  ctx.setTransform(cv.width/W,0,0,cv.height/H,0,0);}
+addEventListener('resize',fit);
+addEventListener('orientationchange',()=>setTimeout(fit,250));
+fit();
+
+// ---------- helpers ----------
+let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const easeOut=t=>1-Math.pow(1-t,3);
+function bounce(t){const n=7.5625,d=2.75;
+  if(t<1/d)return n*t*t;if(t<2/d)return n*(t-=1.5/d)*t+.75;
+  if(t<2.5/d)return n*(t-=2.25/d)*t+.9375;return n*(t-=2.625/d)*t+.984375;}
+function heart(x,y,s){ctx.beginPath();ctx.moveTo(x,y+s*.3);
+  ctx.bezierCurveTo(x-s,y-s*.3,x-s*.5,y-s,x,y-s*.45);
+  ctx.bezierCurveTo(x+s*.5,y-s,x+s,y-s*.3,x,y+s*.3);ctx.closePath();}
+function mix(c1,c2,t){return `rgb(${c1.map((v,i)=>Math.round(lerp(v,c2[i],t))).join(',')})`;}
+
+// ---------- scene data ----------
+const HEART={x:200,y:108,s:56}, BOW={x:60,y:270};
+const pinks=['#ff8fb1','#ff6f9c','#ffb3c8','#f77fa6'];
+const sparks=Array.from({length:18},(_,i)=>({a:i/18*Math.PI*2+rnd()*.3,v:50+rnd()*90,s:8+rnd()*10}));
+const floaters=Array.from({length:34},()=>({x:rnd()*W,s:6+rnd()*12,v:35+rnd()*55,sw:8+rnd()*18,ph:rnd()*6.28,st:2+rnd()*5,c:pinks[(rnd()*4)|0]}));
+const balloons=Array.from({length:9},(_,i)=>({x:30+rnd()*340,r:19+rnd()*7,v:28+rnd()*22,st:3.4+i*.45,ph:rnd()*6.28,
+  c:[['#ffd27a','#b8860b','#7a3d00'],['#ffd0dd','#d86f93','#b3124f'],['#ffffff','#c9b6c0','#c2476f'],['#ffb3c8','#c2476f','#ffffff']][i%4]}));
+
+// ---------- সুন্দর বড় হার্ট (তীরের টার্গেট) ----------
+function sparkle(x,y,r){ctx.beginPath();ctx.moveTo(x,y-r);ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.quadraticCurveTo(x,y,x,y+r);ctx.quadraticCurveTo(x,y,x-r,y);ctx.quadraticCurveTo(x,y,x,y-r);ctx.fill();}
+function fancyHeart(x,y,s,t){
+  ctx.save();
+  ctx.shadowColor='rgba(255,70,130,.95)';ctx.shadowBlur=30;
+  const g=ctx.createRadialGradient(x-s*.35,y-s*.45,s*.1,x,y,s*1.25);
+  g.addColorStop(0,'#ffd6e4');g.addColorStop(.45,'#ff7aa6');g.addColorStop(1,'#d81b5a');
+  ctx.fillStyle=g;heart(x,y,s);ctx.fill();ctx.shadowBlur=0;
+  ctx.lineWidth=3;ctx.strokeStyle='#ffe0ea';heart(x,y,s);ctx.stroke();
+  ctx.lineWidth=1.3;ctx.strokeStyle='rgba(255,255,255,.55)';heart(x,y+2,s*.76);ctx.stroke();
+  ctx.setLineDash([2,5]);ctx.strokeStyle='rgba(255,255,255,.5)';heart(x,y+3,s*.6);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='rgba(255,255,255,.7)';
+  ctx.beginPath();ctx.ellipse(x-s*.52,y-s*.45,s*.2,s*.1,-.7,0,6.283);ctx.fill();
+  ctx.beginPath();ctx.arc(x-s*.22,y-s*.72,s*.05,0,6.283);ctx.fill();
+  ctx.fillStyle='#fff';
+  for(let k=0;k<5;k++){const a=t*1.4+k*1.2566,r=s*(1.3+.1*Math.sin(t*3+k));
+    sparkle(x+Math.cos(a)*r,y+Math.sin(a)*r*.85,3+2*Math.sin(t*5+k));}
+  ctx.restore();
+}
+// ---------- কেকের ফুল ও সাজ ----------
+function flower(x,y,r,pc,cc){
+  for(let i=0;i<5;i++){ctx.save();ctx.translate(x,y);ctx.rotate(i*1.2566);
+    ctx.fillStyle=pc;ctx.strokeStyle='rgba(210,70,120,.4)';ctx.lineWidth=.8;
+    ctx.beginPath();ctx.ellipse(0,-r*.62,r*.42,r*.62,0,0,6.283);ctx.fill();ctx.stroke();ctx.restore();}
+  ctx.fillStyle=cc;ctx.beginPath();ctx.arc(x,y,r*.32,0,6.283);ctx.fill();
+}
+const petals=['#ffffff','#ffd0e0','#ffe9a8'];
+function deco(cx,top,w,h,dy,al,n,fr){
+  ctx.globalAlpha=al;const y=top+dy,ry=h*.28,x=cx-w/2;
+  ctx.fillStyle='#fff3f7';                                   // আইসিং ড্রিপ
+  for(let px=x+9;px<x+w-6;px+=13){const u=(px-cx)/(w/2),ey=y+ry*Math.sqrt(Math.max(0,1-u*u)),l=5+((px*7|0)%3)*4;
+    ctx.beginPath();ctx.rect(px-3.6,ey-1,7.2,l);ctx.arc(px,ey+l,3.6,0,6.283);ctx.fill();}
+  for(let a=.15;a<Math.PI;a+=.2){                            // মুক্তোর বর্ডার
+    ctx.fillStyle=((a*10)|0)%2?'#ffe9a8':'#ffffff';
+    ctx.beginPath();ctx.arc(cx+Math.cos(a)*(w/2-3),y+h+Math.sin(a)*(ry-1)-2,2.4,0,6.283);ctx.fill();}
+  for(let i=0;i<n;i++){                                      // ফুল + হার্ট সারি
+    const u=-.78+i*(1.56/(n-1)),px=cx+u*w/2,py=y+h*.58+ry*Math.sqrt(1-u*u)*.8;
+    if(i%2===0){ctx.fillStyle='#6fcf8f';
+      ctx.beginPath();ctx.ellipse(px-fr*.95,py+2,fr*.6,fr*.28,.5,0,6.283);ctx.fill();
+      ctx.beginPath();ctx.ellipse(px+fr*.95,py+2,fr*.6,fr*.28,-.5,0,6.283);ctx.fill();
+      flower(px,py,fr,petals[(i/2)%3|0],'#ffcf4a');
+    }else{ctx.fillStyle='#ff3f7f';heart(px,py,fr*.85);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.6)';ctx.beginPath();ctx.arc(px-fr*.35,py-fr*.35,fr*.14,0,6.283);ctx.fill();}
+  }
+  ctx.globalAlpha=1;
+}
+
+// ---------- scene 1: bow, arrow, heart ----------
+function scene1(t){
+  const fade=1-clamp((t-1.4)/.5); if(fade<=0)return;
+  ctx.save();ctx.globalAlpha=fade;
+  const dx=HEART.x-BOW.x,dy=HEART.y-BOW.y,dist=Math.hypot(dx,dy),ang=Math.atan2(dy,dx);
+  const pull=18*easeOut(clamp(t/.8)), shoot=clamp((t-.85)/.45), shot=t>=.85;
+  // heart
+  if(t<1.3){fancyHeart(HEART.x,HEART.y,HEART.s*(1+Math.sin(t*6)*.05),t);}
+  // bow + arrow
+  ctx.translate(BOW.x,BOW.y);ctx.rotate(ang);
+  const nock=shot?(shoot<.15?-pull*(1-shoot/.15):0):-pull;
+  ctx.strokeStyle='#d9d9e3';ctx.lineWidth=5;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(0,-46);ctx.quadraticCurveTo(-46,0,0,46);ctx.stroke();
+  ctx.strokeStyle='#9aa';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(0,-46);ctx.lineTo(nock,0);ctx.lineTo(0,46);ctx.stroke();
+  const tip=shot?22+(dist-22)*easeOut(shoot):40-pull;
+  if(t<1.3){ctx.strokeStyle='#eee';ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(tip-52,0);ctx.lineTo(tip,0);ctx.stroke();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(tip+8,0);ctx.lineTo(tip-4,-5);ctx.lineTo(tip-4,5);ctx.fill();
+    ctx.strokeStyle='#ff6f9c';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(tip-52,-4);ctx.lineTo(tip-46,0);ctx.lineTo(tip-52,4);ctx.stroke();}
+  ctx.restore();
+  // shatter
+  if(t>=1.3){const d=t-1.3,a=clamp(1-d/.8);ctx.save();ctx.globalAlpha=a*fade+ (a>0?0:0);
+    sparks.forEach((p,i)=>{ctx.fillStyle=pinks[i%4];
+      heart(HEART.x+Math.cos(p.a)*p.v*d,HEART.y+Math.sin(p.a)*p.v*d+160*d*d,p.s*(1-d*.5));ctx.fill();});
+    ctx.restore();}
+}
+
+// ---------- scene 2: cake, hearts, balloons, text ----------
+function floatingHearts(t){
+  floaters.forEach(f=>{if(t<f.st)return;const cyc=(H+60)/f.v,tt=(t-f.st)%cyc;
+    const y=H+30-tt*f.v,x=f.x+Math.sin(tt*1.6+f.ph)*f.sw;
+    ctx.globalAlpha=.85*clamp((t-f.st)/1)*(f.s>12?.9:.7);ctx.fillStyle=f.c;heart(x,y,f.s);ctx.fill();});
+  ctx.globalAlpha=1;
+}
+function balloon(b,t){if(t<b.st)return;const cyc=(H+140)/b.v,tt=(t-b.st)%cyc;
+  const y=H+60-tt*b.v,x=b.x+Math.sin(tt*1.2+b.ph)*12;
+  const g=ctx.createRadialGradient(x-b.r*.35,y-b.r*.45,b.r*.1,x,y,b.r*1.3);
+  g.addColorStop(0,b.c[0]);g.addColorStop(1,b.c[1]);
+  ctx.globalAlpha=.92*clamp((t-b.st)/.8);ctx.fillStyle=g;
+  const by=y+b.r*1.15;
+  ctx.strokeStyle='rgba(255,255,255,.55)';ctx.lineWidth=1;                 // সুতো
+  ctx.beginPath();ctx.moveTo(x,by);ctx.bezierCurveTo(x-6,by+14,x+6,by+26,x-2,by+42);ctx.stroke();
+  ctx.beginPath();ctx.ellipse(x,y,b.r,b.r*1.15,0,0,6.283);ctx.fill();
+  ctx.fillStyle=b.c[1];ctx.beginPath();ctx.moveTo(x,by-1);ctx.lineTo(x-3,by+4);ctx.lineTo(x+3,by+4);ctx.fill();  // গিঁট
+  ctx.fillStyle='rgba(255,255,255,.55)';ctx.beginPath();                    // শাইন
+  ctx.ellipse(x-b.r*.4,y-b.r*.55,b.r*.18,b.r*.3,.5,0,6.283);ctx.fill();
+  ctx.fillStyle=b.c[2];ctx.textAlign='center';ctx.textBaseline='middle';    // Love u লেখা
+  ctx.font='bold italic '+(b.r*.52).toFixed(1)+'px sans-serif';
+  ctx.fillText('Love u',x,y+b.r*.12);
+  ctx.textAlign='start';ctx.textBaseline='alphabetic';ctx.globalAlpha=1;}
+function tier(cx,top,w,h,dy,al,t0,t1){
+  ctx.globalAlpha=al;const x=cx-w/2,y=top+dy,ry=h*.28;
+  const g=ctx.createLinearGradient(x,0,x+w,0);g.addColorStop(0,t0);g.addColorStop(.5,t1);g.addColorStop(1,t0);
+  ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+h);
+  ctx.ellipse(cx,y+h,w/2,ry,0,Math.PI,0,true);ctx.lineTo(x+w,y);ctx.fill();
+  ctx.fillStyle='#ffc2d4';ctx.beginPath();ctx.ellipse(cx,y,w/2,ry,0,0,6.283);ctx.fill();
+  ctx.fillStyle='#ff9bb9';ctx.beginPath();ctx.ellipse(cx,y,w/2-6,ry-3,0,0,6.283);ctx.fill();
+  ctx.globalAlpha=1;}
+function cake(t){
+  const cx=200,plateY=396;
+  const a0=clamp((t-2.2)/.5);if(a0<=0)return;
+  ctx.globalAlpha=a0;const gl=ctx.createRadialGradient(cx,plateY,10,cx,plateY,130);
+  gl.addColorStop(0,'rgba(255,200,110,.35)');gl.addColorStop(1,'rgba(255,200,110,0)');
+  ctx.fillStyle=gl;ctx.fillRect(0,plateY-130,W,260);
+  ctx.fillStyle='#b8860b';ctx.beginPath();ctx.ellipse(cx,plateY+4,108,16,0,0,6.283);ctx.fill();
+  ctx.fillStyle='#e8b64a';ctx.beginPath();ctx.ellipse(cx,plateY,108,15,0,0,6.283);ctx.fill();ctx.globalAlpha=1;
+  const drop=s=>{const p=clamp((t-s)/.9);return {dy:(1-bounce(p))*-260,al:clamp((t-s)/.25)};};
+  ctx.globalAlpha=a0;                                         // প্লেটের দুই পাশে ফুল-পাতা
+  [-1,1].forEach(s=>{const fx=cx+s*92;ctx.fillStyle='#6fcf8f';
+    ctx.beginPath();ctx.ellipse(fx-s*12,plateY-1,9,3.5,s*.4,0,6.283);ctx.fill();
+    ctx.beginPath();ctx.ellipse(fx+s*12,plateY+1,9,3.5,-s*.4,0,6.283);ctx.fill();
+    flower(fx,plateY-3,9,s<0?'#ffffff':'#ffd0e0','#ffcf4a');
+    ctx.fillStyle='#ff3f7f';heart(fx-s*24,plateY-2,6);ctx.fill();});
+  ctx.globalAlpha=1;
+  let d=drop(2.2);tier(cx,352,150,42,0,d.al,'#e9588a','#ff86ae');deco(cx,352,150,42,0,d.al,7,7.5);
+  d=drop(2.9);tier(cx,318,106,34,d.dy,d.al,'#d94f86','#ff7fae');deco(cx,318,106,34,d.dy,d.al,5,6);
+  d=drop(3.5);tier(cx,290,66,28,d.dy,d.al,'#e9588a','#ff86ae');deco(cx,290,66,28,d.dy,d.al,3,5);
+  {const ty=290+d.dy;ctx.globalAlpha=d.al;                    // উপরের স্তরে ফুল ও হার্ট
+   flower(cx-22,ty,5,'#ffffff','#ffcf4a');flower(cx+22,ty,5,'#ffd0e0','#ffcf4a');
+   ctx.fillStyle='#ff3f7f';heart(cx-11,ty+3,4);ctx.fill();heart(cx+11,ty+3,4);ctx.fill();ctx.globalAlpha=1;}
+  if(t>4.3){const a=clamp((t-4.3)/.4);ctx.globalAlpha=a;
+    ctx.fillStyle='#fff';ctx.fillRect(cx-2.5,266,5,24);
+    const f=1+Math.sin(t*14)*.12;ctx.fillStyle='#ffb347';ctx.shadowColor='#ffcf70';ctx.shadowBlur=14;
+    ctx.beginPath();ctx.ellipse(cx,258,4*f,9*f,0,0,6.283);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;}
+}
+function title(t){
+  const p=clamp((t-5.2)/3.2);if(p<=0)return;
+  ctx.save();ctx.font="70px 'Great Vibes',cursive";ctx.textBaseline='alphabetic';
+  const txt='Happy Birthday',w=ctx.measureText(txt).width,x=(W-w)/2,y=140;
+  ctx.save();
+  ctx.beginPath();ctx.rect(x-10,y-80,(w+20)*easeOut(p),130);ctx.clip();
+  ctx.shadowColor='rgba(255,215,140,.9)';ctx.shadowBlur=16;ctx.fillStyle='#fff6e0';ctx.fillText(txt,x,y);
+  ctx.shadowBlur=0;ctx.lineWidth=1;ctx.strokeStyle='rgba(255,230,170,.8)';ctx.strokeText(txt,x,y);
+  ctx.restore();
+  // নাম (নিচের লাইন) — NAME বদলে নিজের নাম দাও
+  const q=clamp((t-8.2)/1.2);
+  if(q>0){ctx.globalAlpha=q;ctx.font="50px 'Great Vibes',cursive";
+    const nw=ctx.measureText(NAME).width;
+    ctx.shadowColor='rgba(255,215,140,.9)';ctx.shadowBlur=14;ctx.fillStyle='#ffd98a';
+    ctx.fillText(NAME,(W-nw)/2,y+58+(1-easeOut(q))*10);ctx.globalAlpha=1;}
+  const m=clamp((t-9.4)/1);                                   // শুভেচ্ছা বার্তা
+  if(m>0){ctx.globalAlpha=m;ctx.shadowBlur=0;ctx.textAlign='center';
+    ctx.font="600 17px 'Hind Siliguri','Noto Sans Bengali',sans-serif";
+    ctx.fillStyle='#ffe6ef';ctx.fillText(MSG,W/2,y+92);
+    const mw=ctx.measureText(MSG).width;ctx.fillStyle='#ff6f9c';
+    heart(W/2-mw/2-16,y+87,6);ctx.fill();heart(W/2+mw/2+16,y+87,6);ctx.fill();
+    ctx.textAlign='start';ctx.globalAlpha=1;}
+  ctx.restore();
+}
+
+// ---------- তারার ঝিলিক ----------
+const stars=Array.from({length:46},()=>({x:rnd()*W,y:rnd()*H*.78,r:1.5+rnd()*3,ph:rnd()*6.28,g:rnd()>.5}));
+function twinkle(t,k){stars.forEach(s=>{const f=Math.abs(Math.sin(t*2.2+s.ph));
+  ctx.globalAlpha=(.25+.75*f)*k;ctx.fillStyle=s.g?'#ffe9a8':'#ffffff';sparkle(s.x,s.y,s.r*(.7+.5*f));});
+  ctx.globalAlpha=1;}
+
+// ---------- কনফেটি ----------
+const confCols=['#ff5c8a','#ffd45e','#6fcf8f','#6ec6ff','#c28bff','#ffffff','#ff9f6b'];
+const confetti=Array.from({length:90},()=>({x:rnd()*W,st:7.6+rnd()*1.8,v:70+rnd()*90,sw:10+rnd()*20,ph:rnd()*6.28,
+  w:5+rnd()*5,h:3+rnd()*4,rot:rnd()*6.28,rs:2+rnd()*6,c:confCols[(rnd()*7)|0]}));
+function drawConfetti(t){confetti.forEach(c=>{if(t<c.st)return;const tt=t-c.st,y=-14+tt*c.v;if(y>H+14)return;
+  ctx.save();ctx.translate(c.x+Math.sin(tt*2+c.ph)*c.sw,y);ctx.rotate(c.rot+tt*c.rs);
+  ctx.scale(1,Math.cos(tt*5+c.ph));ctx.fillStyle=c.c;ctx.fillRect(-c.w/2,-c.h/2,c.w,c.h);ctx.restore();});}
+
+// ---------- মিউজিক (Happy Birthday সুর, কোনো ফাইল লাগে না) ----------
+let AC=null,master=null,musicOn=false;
+const NOTES=[[392,.75],[392,.25],[440,1],[392,1],[523.25,1],[493.88,2],
+  [392,.75],[392,.25],[440,1],[392,1],[587.33,1],[523.25,2],
+  [392,.75],[392,.25],[783.99,1],[659.25,1],[523.25,1],[493.88,1],[440,1],
+  [698.46,.75],[698.46,.25],[659.25,1],[523.25,1],[587.33,1],[523.25,2]];
+function stopMusic(){if(master){try{master.disconnect();}catch(e){}master=null;}}
+function playMusic(){
+  if(!musicOn)return;
+  try{
+    if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state==='suspended')AC.resume();
+    stopMusic();
+    master=AC.createGain();master.gain.value=.22;master.connect(AC.destination);
+    let at=AC.currentTime+.05;const beat=.5;
+    NOTES.forEach(n=>{const dur=n[1]*beat,o=AC.createOscillator(),g=AC.createGain();
+      o.type='triangle';o.frequency.value=n[0];
+      g.gain.setValueAtTime(0,at);g.gain.linearRampToValueAtTime(1,at+.02);
+      g.gain.exponentialRampToValueAtTime(.001,at+dur*.95);
+      o.connect(g);g.connect(master);o.start(at);o.stop(at+dur);at+=dur;});
+  }catch(e){}
+}
+
+// ---------- স্থায়ী ক্রেডিট (সবসময় নিচে দেখা যাবে) ----------
+function credit(){
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  ctx.font="600 12px 'Hind Siliguri',system-ui,sans-serif";
+  const txt='Created by Muhammad Abid Hakim',w=ctx.measureText(txt).width;
+  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(W/2-w/2-22,H-28,w+44,21);
+  ctx.shadowColor='rgba(0,0,0,.6)';ctx.shadowBlur=3;ctx.fillStyle='rgba(255,236,200,.96)';
+  ctx.fillText(txt,W/2,H-13);ctx.shadowBlur=0;
+  ctx.fillStyle='#ff6f9c';heart(W/2-w/2-10,H-17,4);ctx.fill();heart(W/2+w/2+10,H-17,4);ctx.fill();
+  ctx.restore();}
+
+// ---------- main loop ----------
+let t0=performance.now(),last=0;
+const mb=document.getElementById('mb');
+mb.addEventListener('click',()=>{musicOn=!musicOn;
+  if(musicOn){t0=performance.now();last=0;playMusic();mb.textContent='🔇 মিউজিক বন্ধ করো';}
+  else{stopMusic();mb.textContent='🔊 মিউজিক চালু করো';}});
+cv.addEventListener('click',()=>{t0=performance.now();last=0;playMusic();});
+function frame(now){requestAnimationFrame(frame);try{draw(now);}catch(e){}}   // কোনো ত্রুটিতেও লুপ থামবে না
+function draw(now){
+  const t=((now-t0)/1000)%TOTAL, k=clamp((t-1.6)/.7);
+  if(t<last)playMusic();last=t;   // লুপ ঘুরলে সুরও নতুন করে শুরু
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=mix([10,10,46],[74,14,52],k);ctx.fillRect(0,0,W,H);
+  const v=ctx.createRadialGradient(W/2,H*.6,60,W/2,H*.6,330);
+  v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.45)');ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
+  scene1(t);
+  if(t>1.8){twinkle(t,k);floatingHearts(t);balloons.forEach(b=>balloon(b,t));cake(t);title(t);drawConfetti(t);}
+  credit();
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
