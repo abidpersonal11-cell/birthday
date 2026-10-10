@@ -9,40 +9,46 @@
 <!-- Created by Muhammad Abid Hakim -->
 <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Hind+Siliguri:wght@600&display=swap" rel="stylesheet">
 <style>
-  html,body{margin:0;height:100%;background:#0b0b0b;color:#fff;overflow:hidden;
+  html,body{margin:0;width:100%;height:100%;background:#0b0b0b;color:#fff;overflow:hidden;
     font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans Bengali',sans-serif;
     -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
-    -webkit-user-select:none;user-select:none}
-  body{display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;
-    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-  h1{font-size:18px;font-weight:600;margin:0 0 8px}
-  canvas{display:block;width:300px;height:345px;border-radius:6px}
-  p{font-size:12px;opacity:.5;margin:8px 0 0}
-  button{margin-top:8px;cursor:pointer;padding:9px 18px;border:0;border-radius:20px;background:#ff6f9c;color:#fff;
-    font-size:14px;font-weight:600;font-family:inherit}
+    -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+  canvas{position:fixed;left:0;top:0;display:block;z-index:0}
+  .ui{position:fixed;z-index:2;top:10px;right:10px;top:max(10px,env(safe-area-inset-top));
+    right:max(10px,env(safe-area-inset-right));display:flex;gap:8px}
+  button{padding:8px 14px;border:0;border-radius:18px;background:rgba(255,111,156,.92);color:#fff;
+    font-size:13px;font-weight:600;font-family:inherit;cursor:pointer}
 </style>
 </head>
 <body>
-<h1>Birthday Surprise</h1>
 <canvas id="c"></canvas>
-<button id="mb">🔊 মিউজিক চালু করো</button>
-<p>আবার দেখতে অ্যানিমেশনে ট্যাপ করো</p>
+<div class="ui"><button id="mb">🔊 মিউজিক চালু করো</button><button id="fs" style="display:none">⛶ ফুলস্ক্রিন</button></div>
 <script>
 // লিংকের শেষে ?name=Rahim&msg=শুভ জন্মদিন দিলে নাম/বার্তা বদলে যাবে (না দিলে নিচের ডিফল্ট)
 const P=new URLSearchParams(location.search);
 const NAME=(P.get('name')||'Sadia').slice(0,18);
-const MSG=(P.get('msg')||'তোমার দিনটা সুন্দর কাটুক').slice(0,42);
+// বার্তা: ডিফল্ট হলো পুরো দোয়া। লিংকে ?msg=... দিলে সেটা দেখাবে (নতুন অনুচ্ছেদের জন্য | চিহ্ন দাও)
+const PARAS=P.get('msg')?P.get('msg').slice(0,420).split('|'):[
+  'জন্মদিন মুবারক, '+NAME+'!',
+  'এই দিনে মহান আল্লাহ সুবহানাহু ওয়া তায়ালার কাছে দোয়া করি, তিনি যেন তোমার, আমার ও আমাদের সকলের অতীত ও ভবিষ্যতের সমস্ত গুনাহ ক্ষমা করে দেন। আগামীর দিনগুলো যেন আমরা তাঁর সন্তুষ্টি নিয়ে বাঁচতে পারি, আল্লাহ তা কবুল করুন। নেক হায়াত, সুস্থতা ও সফলতা দান করুন।',
+  'আমীন, ছুম্মা আমীন।'];
+const PAUSE=7,CH_DT=.09;   // অনুচ্ছেদের মাঝে বিরতি, প্রতি অক্ষরে সময় (সেকেন্ড)
 if(document.fonts){document.fonts.load("20px 'Great Vibes'");document.fonts.load("600 17px 'Hind Siliguri'");}
-const W=400,H=460,TOTAL=12.5;
+const seg=str=>(window.Intl&&Intl.Segmenter)?Array.from(new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(str),x=>x.segment):Array.from(str);
+const NSEG=seg(NAME),PSEG=PARAS.map(seg);
+const UNITS=PSEG.reduce((a,b)=>a+b.length,0)+PAUSE*(PSEG.length-1);
+const NAME_T0=8.2,NAME_END=NAME_T0+NSEG.length*.1+.5,MSG_T0=NAME_END+.8,MSG_END=MSG_T0+UNITS*CH_DT;
+const W=400,H=460,TOTAL=Math.max(15,MSG_END+6);
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
-function fit(){   // যেকোনো স্ক্রিনে ঠিক মাপে বসে (ফোন/ট্যাবলেট/পিসি, পোর্ট্রেট/ল্যান্ডস্কেপ)
+let S=1,VW=W,VH=H,OX=0,OY=0;
+function fit(){   // পুরো স্ক্রিন জুড়ে ক্যানভাস; মূল দৃশ্য মাঝখানে, চারপাশ ব্যাকগ্রাউন্ড+কণায় ভরা
   const vw=window.innerWidth||document.documentElement.clientWidth,
         vh=window.innerHeight||document.documentElement.clientHeight;
-  const cw=Math.max(180,Math.min(vw*.96,(vh-125)*W/H,520)),ch=cw*H/W;
-  cv.style.width=cw+'px';cv.style.height=ch+'px';
-  const r=Math.min(window.devicePixelRatio||1,2);   // হাই-ডিপিআই ফোনে ল্যাগ কমাতে ২-এ সীমা
-  cv.width=Math.round(cw*r);cv.height=Math.round(ch*r);
-  ctx.setTransform(cv.width/W,0,0,cv.height/H,0,0);}
+  const r=Math.min(window.devicePixelRatio||1,2);
+  cv.style.width=vw+'px';cv.style.height=vh+'px';
+  cv.width=Math.round(vw*r);cv.height=Math.round(vh*r);
+  S=Math.min(vw/W,vh/H);VW=vw/S;VH=vh/S;OX=(VW-W)/2;OY=(VH-H)/2;
+  ctx.setTransform(cv.width/VW,0,0,cv.height/VH,0,0);}
 addEventListener('resize',fit);
 addEventListener('orientationchange',()=>setTimeout(fit,250));
 fit();
@@ -64,8 +70,8 @@ function mix(c1,c2,t){return `rgb(${c1.map((v,i)=>Math.round(lerp(v,c2[i],t))).j
 const HEART={x:200,y:108,s:56}, BOW={x:60,y:270};
 const pinks=['#ff8fb1','#ff6f9c','#ffb3c8','#f77fa6'];
 const sparks=Array.from({length:18},(_,i)=>({a:i/18*Math.PI*2+rnd()*.3,v:50+rnd()*90,s:8+rnd()*10}));
-const floaters=Array.from({length:34},()=>({x:rnd()*W,s:6+rnd()*12,v:35+rnd()*55,sw:8+rnd()*18,ph:rnd()*6.28,st:2+rnd()*5,c:pinks[(rnd()*4)|0]}));
-const balloons=Array.from({length:9},(_,i)=>({x:30+rnd()*340,r:19+rnd()*7,v:28+rnd()*22,st:3.4+i*.45,ph:rnd()*6.28,
+const floaters=Array.from({length:34},()=>({x:rnd(),s:6+rnd()*12,v:35+rnd()*55,sw:8+rnd()*18,ph:rnd()*6.28,st:2+rnd()*5,c:pinks[(rnd()*4)|0]}));
+const balloons=Array.from({length:9},(_,i)=>({x:.08+rnd()*.84,r:19+rnd()*7,v:28+rnd()*22,st:3.4+i*.45,ph:rnd()*6.28,
   c:[['#ffd27a','#b8860b','#7a3d00'],['#ffd0dd','#d86f93','#b3124f'],['#ffffff','#c9b6c0','#c2476f'],['#ffb3c8','#c2476f','#ffffff']][i%4]}));
 
 // ---------- সুন্দর বড় হার্ট (তীরের টার্গেট) ----------
@@ -146,13 +152,13 @@ function scene1(t){
 
 // ---------- scene 2: cake, hearts, balloons, text ----------
 function floatingHearts(t){
-  floaters.forEach(f=>{if(t<f.st)return;const cyc=(H+60)/f.v,tt=(t-f.st)%cyc;
-    const y=H+30-tt*f.v,x=f.x+Math.sin(tt*1.6+f.ph)*f.sw;
+  floaters.forEach(f=>{if(t<f.st)return;const cyc=(VH+60)/f.v,tt=(t-f.st)%cyc;
+    const y=VH+30-tt*f.v,x=f.x*VW+Math.sin(tt*1.6+f.ph)*f.sw;
     ctx.globalAlpha=.85*clamp((t-f.st)/1)*(f.s>12?.9:.7);ctx.fillStyle=f.c;heart(x,y,f.s);ctx.fill();});
   ctx.globalAlpha=1;
 }
-function balloon(b,t){if(t<b.st)return;const cyc=(H+140)/b.v,tt=(t-b.st)%cyc;
-  const y=H+60-tt*b.v,x=b.x+Math.sin(tt*1.2+b.ph)*12;
+function balloon(b,t){if(t<b.st)return;const cyc=(VH+140)/b.v,tt=(t-b.st)%cyc;
+  const y=VH+60-tt*b.v,x=b.x*VW+Math.sin(tt*1.2+b.ph)*12;
   const g=ctx.createRadialGradient(x-b.r*.35,y-b.r*.45,b.r*.1,x,y,b.r*1.3);
   g.addColorStop(0,b.c[0]);g.addColorStop(1,b.c[1]);
   ctx.globalAlpha=.92*clamp((t-b.st)/.8);ctx.fillStyle=g;
@@ -205,41 +211,119 @@ function cake(t){
 function title(t){
   const p=clamp((t-5.2)/3.2);if(p<=0)return;
   ctx.save();ctx.font="70px 'Great Vibes',cursive";ctx.textBaseline='alphabetic';
-  const txt='Happy Birthday',w=ctx.measureText(txt).width,x=(W-w)/2,y=140;
+  const txt='Happy Birthday',w=ctx.measureText(txt).width,x=(W-w)/2,y=96;
   ctx.save();
   ctx.beginPath();ctx.rect(x-10,y-80,(w+20)*easeOut(p),130);ctx.clip();
   ctx.shadowColor='rgba(255,215,140,.9)';ctx.shadowBlur=16;ctx.fillStyle='#fff6e0';ctx.fillText(txt,x,y);
   ctx.shadowBlur=0;ctx.lineWidth=1;ctx.strokeStyle='rgba(255,230,170,.8)';ctx.strokeText(txt,x,y);
   ctx.restore();
-  // নাম (নিচের লাইন) — NAME বদলে নিজের নাম দাও
-  const q=clamp((t-8.2)/1.2);
-  if(q>0){ctx.globalAlpha=q;ctx.font="50px 'Great Vibes',cursive";
-    const nw=ctx.measureText(NAME).width;
-    ctx.shadowColor='rgba(255,215,140,.9)';ctx.shadowBlur=14;ctx.fillStyle='#ffd98a';
-    ctx.fillText(NAME,(W-nw)/2,y+58+(1-easeOut(q))*10);ctx.globalAlpha=1;}
-  const m=clamp((t-9.4)/1);                                   // শুভেচ্ছা বার্তা
-  if(m>0){ctx.globalAlpha=m;ctx.shadowBlur=0;ctx.textAlign='center';
-    ctx.font="600 17px 'Hind Siliguri','Noto Sans Bengali',sans-serif";
-    ctx.fillStyle='#ffe6ef';ctx.fillText(MSG,W/2,y+92);
-    const mw=ctx.measureText(MSG).width;ctx.fillStyle='#ff6f9c';
-    heart(W/2-mw/2-16,y+87,6);ctx.fill();heart(W/2+mw/2+16,y+87,6);ctx.fill();
-    ctx.textAlign='start';ctx.globalAlpha=1;}
+  // নাম — অক্ষর একটা একটা করে লাফিয়ে ফোটে
+  if(t>NAME_T0){
+    const nfont=px=>px+"px 'Great Vibes','Brush Script MT',cursive";
+    let nf=62;ctx.font=nfont(nf);let nw=ctx.measureText(NAME).width;
+    if(nw>W-40){nf=Math.floor(nf*(W-40)/nw);ctx.font=nfont(nf);nw=ctx.measureText(NAME).width;}
+    const nx=(W-nw)/2,ny=y+64;ctx.lineJoin='round';ctx.textAlign='left';
+    NSEG.forEach((ch,i)=>{
+      const pp=clamp((t-NAME_T0-i*.1)/.5);if(pp<=0)return;
+      const off=ctx.measureText(NSEG.slice(0,i).join('')).width,cw=ctx.measureText(ch).width;
+      const e=pp-1,sc=1+2.70158*e*e*e+1.70158*e*e;                 // ওভারশুট বাউন্স
+      ctx.save();ctx.globalAlpha=clamp(pp*2.5);
+      ctx.translate(nx+off+cw/2,ny-(1-pp)*22);ctx.scale(sc,sc);ctx.translate(-cw/2,0);
+      ctx.lineWidth=7;ctx.strokeStyle='#3b0a26';ctx.shadowBlur=0;ctx.strokeText(ch,0,0);   // গাঢ় আউটলাইন
+      const ng=ctx.createLinearGradient(0,-nf*.7,0,nf*.15);
+      ng.addColorStop(0,'#fffbd0');ng.addColorStop(.5,'#ffd23f');ng.addColorStop(1,'#ff9a1f');
+      ctx.shadowColor='rgba(255,200,60,.95)';ctx.shadowBlur=20;ctx.fillStyle=ng;ctx.fillText(ch,0,0);
+      ctx.restore();});
+    ctx.textAlign='start';}
+  drawMessage(t);
   ctx.restore();
 }
 
+// ---------- পুরো বার্তা: প্যানেলে লাইন ভেঙে টাইপরাইটার ----------
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+const MFAM="'Hind Siliguri','Noto Sans Bengali',sans-serif",PANEL={y:176,h:246};
+function layoutMsg(){
+  const maxW=W-72;let res=null;
+  for(let fs=17;fs>=10;fs--){
+    ctx.font="600 "+fs+"px "+MFAM;
+    const lh=Math.round(fs*1.55),lines=[];let u=0,h=0;
+    PSEG.forEach((pg,pi)=>{
+      if(pi>0){u+=PAUSE;h+=lh*.5;}
+      const words=[];let cur=[];
+      pg.forEach(g=>{if(g===' '){words.push(cur);cur=[];}else cur.push(g);});words.push(cur);
+      let line=[],lu=u;
+      const push=()=>{if(line.length){lines.push({g:line,u0:lu,c:pi,y:h,w:ctx.measureText(line.join('')).width});h+=lh;}};
+      words.forEach((wd,wi)=>{
+        if(wi>0)u++;
+        const cand=line.length?line.concat([' '],wd):wd;
+        if(line.length&&ctx.measureText(cand.join('')).width>maxW){push();line=wd.slice();lu=u;}else line=cand;
+        u+=wd.length;});
+      push();});
+    res={lines:lines,fs:fs,lh:lh,h:h};
+    if(h<=PANEL.h-32)break;}
+  return res;}
+let LAY=null;
+function getLay(){if(LAY)return LAY;const r=layoutMsg();
+  if(!document.fonts||document.fonts.status==='loaded')LAY=r;return r;}
+function drawMessage(t){
+  if(t<MSG_T0-.6)return;
+  const L=getLay(),pa=clamp((t-(MSG_T0-.6))/.6);
+  ctx.save();ctx.globalAlpha=pa;
+  ctx.fillStyle='rgba(32,6,28,.68)';rr(20,PANEL.y,W-40,PANEL.h,18);ctx.fill();
+  ctx.lineWidth=1.2;ctx.strokeStyle='rgba(255,200,220,.45)';ctx.stroke();
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.font="600 "+L.fs+"px "+MFAM;
+  const n=Math.floor((t-MSG_T0)/CH_DT)+1,top=PANEL.y+(PANEL.h-L.h)/2,last=PSEG.length-1;
+  let cx=0,cy=0,any=false;
+  L.lines.forEach(ln=>{
+    const r=clamp(n-ln.u0,0,ln.g.length);if(r<=0)return;
+    const x=(W-ln.w)/2,yy=top+ln.y+L.fs*1.1,shown=ln.g.slice(0,r).join('');
+    ctx.fillStyle=last>0?(ln.c===0?'#ffd98a':(ln.c===last?'#ffb3c8':'#fff0f6')):'#fff0f6';
+    ctx.fillText(shown,x,yy);cx=x+ctx.measureText(shown).width+2;cy=yy;any=true;});
+  if(any&&(n<UNITS||Math.floor(t*2.5)%2===0)){ctx.fillStyle='#ff6f9c';ctx.fillRect(cx,cy-L.fs*.85,2,L.fs*1.05);}
+  ctx.restore();}
+
 // ---------- তারার ঝিলিক ----------
-const stars=Array.from({length:46},()=>({x:rnd()*W,y:rnd()*H*.78,r:1.5+rnd()*3,ph:rnd()*6.28,g:rnd()>.5}));
+const stars=Array.from({length:46},()=>({x:rnd(),y:rnd()*.85,r:1.5+rnd()*3,ph:rnd()*6.28,g:rnd()>.5}));
 function twinkle(t,k){stars.forEach(s=>{const f=Math.abs(Math.sin(t*2.2+s.ph));
-  ctx.globalAlpha=(.25+.75*f)*k;ctx.fillStyle=s.g?'#ffe9a8':'#ffffff';sparkle(s.x,s.y,s.r*(.7+.5*f));});
+  ctx.globalAlpha=(.25+.75*f)*k;ctx.fillStyle=s.g?'#ffe9a8':'#ffffff';sparkle(s.x*VW,s.y*VH,s.r*(.7+.5*f));});
   ctx.globalAlpha=1;}
 
 // ---------- কনফেটি ----------
 const confCols=['#ff5c8a','#ffd45e','#6fcf8f','#6ec6ff','#c28bff','#ffffff','#ff9f6b'];
-const confetti=Array.from({length:90},()=>({x:rnd()*W,st:7.6+rnd()*1.8,v:70+rnd()*90,sw:10+rnd()*20,ph:rnd()*6.28,
+const confetti=Array.from({length:90},()=>({x:rnd(),st:7.6+rnd()*1.8,v:70+rnd()*90,sw:10+rnd()*20,ph:rnd()*6.28,
   w:5+rnd()*5,h:3+rnd()*4,rot:rnd()*6.28,rs:2+rnd()*6,c:confCols[(rnd()*7)|0]}));
-function drawConfetti(t){confetti.forEach(c=>{if(t<c.st)return;const tt=t-c.st,y=-14+tt*c.v;if(y>H+14)return;
-  ctx.save();ctx.translate(c.x+Math.sin(tt*2+c.ph)*c.sw,y);ctx.rotate(c.rot+tt*c.rs);
+function drawConfetti(t){confetti.forEach(c=>{if(t<c.st)return;const tt=t-c.st,y=-14+tt*c.v;if(y>VH+14)return;
+  ctx.save();ctx.translate(c.x*VW+Math.sin(tt*2+c.ph)*c.sw,y);ctx.rotate(c.rot+tt*c.rs);
   ctx.scale(1,Math.cos(tt*5+c.ph));ctx.fillStyle=c.c;ctx.fillRect(-c.w/2,-c.h/2,c.w,c.h);ctx.restore();});}
+
+// ---------- আতশবাজি ----------
+const FW_COLS=[['#ff6f9c','#ffd0e0'],['#ffd45e','#fff1b0'],['#6ec6ff','#d6f0ff'],['#c28bff','#ecdcff'],['#ff9f6b','#ffe0cc']];
+const FW_BASE=[{d:0,x:.5,y:.2,k:'ring'},{d:.6,x:.2,y:.3,k:'heart'},{d:1.3,x:.8,y:.24,k:'star'},
+  {d:1.9,x:.35,y:.17,k:'ring'},{d:2.5,x:.68,y:.3,k:'heart'},{d:3.1,x:.5,y:.26,k:'heart'}];
+const BURSTS=[];
+for(let r=0;10.4+r*5<TOTAL-2;r++)FW_BASE.forEach((b,i)=>{const tt=10.4+r*5+b.d;if(tt>TOTAL-1.9)return;
+  BURSTS.push({t:tt,x:r%2?1-b.x:b.x,y:b.y,k:b.k,c:FW_COLS[(i+r)%5],n:b.k==='heart'?60:40,v:b.k==='heart'?95:115});});
+function fireworks(t){
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  BURSTS.forEach(b=>{
+    const dt=t-b.t,bx=b.x*VW,by=b.y*VH;
+    if(dt>-.75&&dt<0){const ry=lerp(VH+10,by,easeOut((dt+.75)/.75));        // উপরে উঠছে রকেট
+      ctx.fillStyle=b.c[1];
+      for(let j=0;j<7;j++){ctx.globalAlpha=(1-j/7)*.8;ctx.beginPath();ctx.arc(bx,ry+j*5,2.2-j*.2,0,6.283);ctx.fill();}}
+    if(dt>=0&&dt<1.7){const life=dt/1.7,ex=1-Math.exp(-3.2*dt),grav=48*dt*dt;
+      for(let i=0;i<b.n;i++){const a=i/b.n*6.2832;let ux,uy;
+        if(b.k==='heart'){ux=Math.pow(Math.sin(a),3);uy=-(13*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a))/16;}
+        else if(b.k==='star'){const r=i%2?.5:1;ux=Math.cos(a)*r;uy=Math.sin(a)*r;}
+        else{ux=Math.cos(a);uy=Math.sin(a);}
+        const d=b.v*ex,fade=Math.max(0,1-life)*(.65+.35*Math.sin(dt*30+i));
+        ctx.fillStyle=i%3?b.c[0]:b.c[1];
+        ctx.globalAlpha=fade;ctx.beginPath();ctx.arc(bx+ux*d,by+uy*d+grav,2.6*(1-life*.6),0,6.283);ctx.fill();
+        ctx.globalAlpha=fade*.35;ctx.beginPath();ctx.arc(bx+ux*d*.88,by+uy*d*.88+grav*.8,1.8*(1-life*.6),0,6.283);ctx.fill();}
+      if(dt<.15){ctx.globalAlpha=1-dt/.15;ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.arc(bx,by,14*(1-dt/.15)+4,0,6.283);ctx.fill();}}
+  });
+  ctx.restore();}
 
 // ---------- মিউজিক (Happy Birthday সুর, কোনো ফাইল লাগে না) ----------
 let AC=null,master=null,musicOn=false;
@@ -247,6 +331,14 @@ const NOTES=[[392,.75],[392,.25],[440,1],[392,1],[523.25,1],[493.88,2],
   [392,.75],[392,.25],[440,1],[392,1],[587.33,1],[523.25,2],
   [392,.75],[392,.25],[783.99,1],[659.25,1],[523.25,1],[493.88,1],[440,1],
   [698.46,.75],[698.46,.25],[659.25,1],[523.25,1],[587.33,1],[523.25,2]];
+let BOOMBUF=null;
+function boom(when){
+  if(!BOOMBUF||BOOMBUF.sampleRate!==AC.sampleRate){
+    const n=AC.sampleRate*.5|0;BOOMBUF=AC.createBuffer(1,n,AC.sampleRate);const d=BOOMBUF.getChannelData(0);
+    for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3);}
+  const src=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();
+  src.buffer=BOOMBUF;f.type='lowpass';f.frequency.value=700;g.gain.value=1.4;
+  src.connect(f);f.connect(g);g.connect(master);src.start(when);}
 function stopMusic(){if(master){try{master.disconnect();}catch(e){}master=null;}}
 function playMusic(){
   if(!musicOn)return;
@@ -255,24 +347,27 @@ function playMusic(){
     if(AC.state==='suspended')AC.resume();
     stopMusic();
     master=AC.createGain();master.gain.value=.22;master.connect(AC.destination);
-    let at=AC.currentTime+.05;const beat=.5;
+    const start=AC.currentTime+.05;const beat=.5;
+    for(let rep=0;rep*13<TOTAL-1;rep++){let at=start+rep*13;
     NOTES.forEach(n=>{const dur=n[1]*beat,o=AC.createOscillator(),g=AC.createGain();
       o.type='triangle';o.frequency.value=n[0];
       g.gain.setValueAtTime(0,at);g.gain.linearRampToValueAtTime(1,at+.02);
       g.gain.exponentialRampToValueAtTime(.001,at+dur*.95);
-      o.connect(g);g.connect(master);o.start(at);o.stop(at+dur);at+=dur;});
+      o.connect(g);g.connect(master);o.start(at);o.stop(at+dur);at+=dur;});}
+    BURSTS.forEach(b=>boom(start+b.t));   // আতশবাজির শব্দ
   }catch(e){}
 }
 
 // ---------- স্থায়ী ক্রেডিট (সবসময় নিচে দেখা যাবে) ----------
 function credit(){
+  const cx=VW/2,by=VH-22;
   ctx.save();ctx.textAlign='center';ctx.textBaseline='alphabetic';
   ctx.font="600 12px 'Hind Siliguri',system-ui,sans-serif";
   const txt='Created by Muhammad Abid Hakim',w=ctx.measureText(txt).width;
-  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(W/2-w/2-22,H-28,w+44,21);
+  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(cx-w/2-22,by-15,w+44,21);
   ctx.shadowColor='rgba(0,0,0,.6)';ctx.shadowBlur=3;ctx.fillStyle='rgba(255,236,200,.96)';
-  ctx.fillText(txt,W/2,H-13);ctx.shadowBlur=0;
-  ctx.fillStyle='#ff6f9c';heart(W/2-w/2-10,H-17,4);ctx.fill();heart(W/2+w/2+10,H-17,4);ctx.fill();
+  ctx.fillText(txt,cx,by);ctx.shadowBlur=0;
+  ctx.fillStyle='#ff6f9c';heart(cx-w/2-10,by-4,4);ctx.fill();heart(cx+w/2+10,by-4,4);ctx.fill();
   ctx.restore();}
 
 // ---------- main loop ----------
@@ -282,16 +377,26 @@ mb.addEventListener('click',()=>{musicOn=!musicOn;
   if(musicOn){t0=performance.now();last=0;playMusic();mb.textContent='🔇 মিউজিক বন্ধ করো';}
   else{stopMusic();mb.textContent='🔊 মিউজিক চালু করো';}});
 cv.addEventListener('click',()=>{t0=performance.now();last=0;playMusic();});
+const fsb=document.getElementById('fs'),de=document.documentElement;
+const reqFS=de.requestFullscreen||de.webkitRequestFullscreen;
+if(reqFS){fsb.style.display='';
+  fsb.addEventListener('click',()=>{
+    if(document.fullscreenElement||document.webkitFullscreenElement)(document.exitFullscreen||document.webkitExitFullscreen).call(document);
+    else reqFS.call(de);});
+  document.addEventListener('fullscreenchange',fit);document.addEventListener('webkitfullscreenchange',fit);}
 function frame(now){requestAnimationFrame(frame);try{draw(now);}catch(e){}}   // কোনো ত্রুটিতেও লুপ থামবে না
 function draw(now){
   const t=((now-t0)/1000)%TOTAL, k=clamp((t-1.6)/.7);
   if(t<last)playMusic();last=t;   // লুপ ঘুরলে সুরও নতুন করে শুরু
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle=mix([10,10,46],[74,14,52],k);ctx.fillRect(0,0,W,H);
-  const v=ctx.createRadialGradient(W/2,H*.6,60,W/2,H*.6,330);
-  v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.45)');ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
-  scene1(t);
-  if(t>1.8){twinkle(t,k);floatingHearts(t);balloons.forEach(b=>balloon(b,t));cake(t);title(t);drawConfetti(t);}
+  ctx.setTransform(cv.width/VW,0,0,cv.height/VH,0,0);
+  ctx.clearRect(0,0,VW,VH);
+  ctx.fillStyle=mix([10,10,46],[74,14,52],k);ctx.fillRect(0,0,VW,VH);
+  const v=ctx.createRadialGradient(VW/2,VH*.6,60,VW/2,VH*.6,Math.max(330,Math.max(VW,VH)*.7));
+  v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.45)');ctx.fillStyle=v;ctx.fillRect(0,0,VW,VH);
+  ctx.save();ctx.translate(OX,OY);scene1(t);ctx.restore();
+  if(t>1.8){twinkle(t,k);floatingHearts(t);balloons.forEach(b=>balloon(b,t));
+    if(t>9.5)fireworks(t);
+    ctx.save();ctx.translate(OX,OY);cake(t);title(t);ctx.restore();drawConfetti(t);}
   credit();
 }
 requestAnimationFrame(frame);
