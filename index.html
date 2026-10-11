@@ -13,6 +13,8 @@
     font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans Bengali',sans-serif;
     -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
     -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+  #vg{position:fixed;left:0;top:0;width:100%;height:100%;z-index:1;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 60%,rgba(0,0,0,0) 25%,rgba(0,0,0,.5) 100%)}
   canvas{position:fixed;left:0;top:0;display:block;z-index:0}
   .ui{position:fixed;z-index:2;top:10px;right:10px;top:max(10px,env(safe-area-inset-top));
     right:max(10px,env(safe-area-inset-right));display:flex;gap:8px}
@@ -22,6 +24,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="vg"></div>
 <div class="ui"><button id="mb">🔊 মিউজিক চালু করো</button><button id="fs" style="display:none">⛶ ফুলস্ক্রিন</button></div>
 <script>
 // লিংকের শেষে ?name=Rahim&msg=শুভ জন্মদিন দিলে নাম/বার্তা বদলে যাবে (না দিলে নিচের ডিফল্ট)
@@ -39,16 +42,16 @@ const NSEG=seg(NAME),PSEG=PARAS.map(seg);
 const UNITS=PSEG.reduce((a,b)=>a+b.length,0)+PAUSE*(PSEG.length-1);
 const NAME_T0=8.2,NAME_END=NAME_T0+NSEG.length*.1+.5,MSG_T0=NAME_END+.8,MSG_END=MSG_T0+UNITS*CH_DT;
 const W=400,H=460,TOTAL=Math.max(15,MSG_END+6);
-const cv=document.getElementById('c'),ctx=cv.getContext('2d');
-let S=1,VW=W,VH=H,OX=0,OY=0;
+const cv=document.getElementById('c');let ctx=cv.getContext('2d',{alpha:false});
+let S=1,VW=W,VH=H,OX=0,OY=0,PX=1;const SP={};
 function fit(){   // পুরো স্ক্রিন জুড়ে ক্যানভাস; মূল দৃশ্য মাঝখানে, চারপাশ ব্যাকগ্রাউন্ড+কণায় ভরা
   const vw=window.innerWidth||document.documentElement.clientWidth,
         vh=window.innerHeight||document.documentElement.clientHeight;
-  const r=Math.min(window.devicePixelRatio||1,2);
+  const r=Math.min(window.devicePixelRatio||1,1.75,Math.sqrt(2.0e6/(vw*vh)));   // পিক্সেল সংখ্যা সীমিত রাখা হয়েছে, যাতে স্মুথ চলে
   cv.style.width=vw+'px';cv.style.height=vh+'px';
   cv.width=Math.round(vw*r);cv.height=Math.round(vh*r);
   S=Math.min(vw/W,vh/H);VW=vw/S;VH=vh/S;OX=(VW-W)/2;OY=(VH-H)/2;
-  ctx.setTransform(cv.width/VW,0,0,cv.height/VH,0,0);}
+  ctx.setTransform(cv.width/VW,0,0,cv.height/VH,0,0);PX=cv.width/VW;for(const k in SP)delete SP[k];}
 addEventListener('resize',fit);
 addEventListener('orientationchange',()=>setTimeout(fit,250));
 fit();
@@ -66,20 +69,29 @@ function heart(x,y,s){ctx.beginPath();ctx.moveTo(x,y+s*.3);
   ctx.bezierCurveTo(x+s*.5,y-s,x+s,y-s*.3,x,y+s*.3);ctx.closePath();}
 function mix(c1,c2,t){return `rgb(${c1.map((v,i)=>Math.round(lerp(v,c2[i],t))).join(',')})`;}
 
+// ---------- স্প্রাইট ক্যাশ: ভারী গ্লো/গ্রেডিয়েন্টের ছবি একবারই আঁকা হয় ----------
+let FV=0;
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{FV++;LAY=null;for(const k in SP)delete SP[k];});
+function sprite(key,w,h,fn){
+  const k=key+':'+FV,c=SP[k];if(c)return c;
+  const o=document.createElement('canvas');o.width=Math.max(1,Math.ceil(w*PX));o.height=Math.max(1,Math.ceil(h*PX));
+  const real=ctx;ctx=o.getContext('2d');ctx.setTransform(PX,0,0,PX,0,0);
+  let m;try{m=fn();}finally{ctx=real;}
+  o.meta=m;SP[k]=o;return o;}
+
 // ---------- scene data ----------
 const HEART={x:200,y:108,s:56}, BOW={x:60,y:270};
 const pinks=['#ff8fb1','#ff6f9c','#ffb3c8','#f77fa6'];
 const sparks=Array.from({length:18},(_,i)=>({a:i/18*Math.PI*2+rnd()*.3,v:50+rnd()*90,s:8+rnd()*10}));
-const floaters=Array.from({length:34},()=>({x:rnd(),s:6+rnd()*12,v:35+rnd()*55,sw:8+rnd()*18,ph:rnd()*6.28,st:2+rnd()*5,c:pinks[(rnd()*4)|0]}));
-const balloons=Array.from({length:9},(_,i)=>({x:.08+rnd()*.84,r:19+rnd()*7,v:28+rnd()*22,st:3.4+i*.45,ph:rnd()*6.28,
+const floaters=Array.from({length:26},()=>({x:rnd(),s:6+rnd()*12,v:35+rnd()*55,sw:8+rnd()*18,ph:rnd()*6.28,st:2+rnd()*5,c:pinks[(rnd()*4)|0]}));
+const balloons=Array.from({length:9},(_,i)=>({id:i,x:.08+rnd()*.84,r:19+rnd()*7,v:28+rnd()*22,st:3.4+i*.45,ph:rnd()*6.28,
   c:[['#ffd27a','#b8860b','#7a3d00'],['#ffd0dd','#d86f93','#b3124f'],['#ffffff','#c9b6c0','#c2476f'],['#ffb3c8','#c2476f','#ffffff']][i%4]}));
 
 // ---------- সুন্দর বড় হার্ট (তীরের টার্গেট) ----------
 function sparkle(x,y,r){ctx.beginPath();ctx.moveTo(x,y-r);ctx.quadraticCurveTo(x,y,x+r,y);
   ctx.quadraticCurveTo(x,y,x,y+r);ctx.quadraticCurveTo(x,y,x-r,y);ctx.quadraticCurveTo(x,y,x,y-r);ctx.fill();}
-function fancyHeart(x,y,s,t){
-  ctx.save();
-  ctx.shadowColor='rgba(255,70,130,.95)';ctx.shadowBlur=30;
+function heartBody(x,y,s){
+  ctx.save();ctx.shadowColor='rgba(255,70,130,.95)';ctx.shadowBlur=30;
   const g=ctx.createRadialGradient(x-s*.35,y-s*.45,s*.1,x,y,s*1.25);
   g.addColorStop(0,'#ffd6e4');g.addColorStop(.45,'#ff7aa6');g.addColorStop(1,'#d81b5a');
   ctx.fillStyle=g;heart(x,y,s);ctx.fill();ctx.shadowBlur=0;
@@ -89,7 +101,11 @@ function fancyHeart(x,y,s,t){
   ctx.fillStyle='rgba(255,255,255,.7)';
   ctx.beginPath();ctx.ellipse(x-s*.52,y-s*.45,s*.2,s*.1,-.7,0,6.283);ctx.fill();
   ctx.beginPath();ctx.arc(x-s*.22,y-s*.72,s*.05,0,6.283);ctx.fill();
-  ctx.fillStyle='#fff';
+  ctx.restore();}
+function fancyHeart(x,y,s,t){
+  const B=HEART.s,K=3.6,sp=sprite('fh',B*K,B*K,()=>heartBody(B*K/2,B*K/2,B));
+  ctx.drawImage(sp,x-s*K/2,y-s*K/2,s*K,s*K);
+  ctx.save();ctx.fillStyle='#fff';
   for(let k=0;k<5;k++){const a=t*1.4+k*1.2566,r=s*(1.3+.1*Math.sin(t*3+k));
     sparkle(x+Math.cos(a)*r,y+Math.sin(a)*r*.85,3+2*Math.sin(t*5+k));}
   ctx.restore();
@@ -159,20 +175,19 @@ function floatingHearts(t){
 }
 function balloon(b,t){if(t<b.st)return;const cyc=(VH+140)/b.v,tt=(t-b.st)%cyc;
   const y=VH+60-tt*b.v,x=b.x*VW+Math.sin(tt*1.2+b.ph)*12;
-  const g=ctx.createRadialGradient(x-b.r*.35,y-b.r*.45,b.r*.1,x,y,b.r*1.3);
-  g.addColorStop(0,b.c[0]);g.addColorStop(1,b.c[1]);
-  ctx.globalAlpha=.92*clamp((t-b.st)/.8);ctx.fillStyle=g;
-  const by=y+b.r*1.15;
-  ctx.strokeStyle='rgba(255,255,255,.55)';ctx.lineWidth=1;                 // সুতো
-  ctx.beginPath();ctx.moveTo(x,by);ctx.bezierCurveTo(x-6,by+14,x+6,by+26,x-2,by+42);ctx.stroke();
-  ctx.beginPath();ctx.ellipse(x,y,b.r,b.r*1.15,0,0,6.283);ctx.fill();
-  ctx.fillStyle=b.c[1];ctx.beginPath();ctx.moveTo(x,by-1);ctx.lineTo(x-3,by+4);ctx.lineTo(x+3,by+4);ctx.fill();  // গিঁট
-  ctx.fillStyle='rgba(255,255,255,.55)';ctx.beginPath();                    // শাইন
-  ctx.ellipse(x-b.r*.4,y-b.r*.55,b.r*.18,b.r*.3,.5,0,6.283);ctx.fill();
-  ctx.fillStyle=b.c[2];ctx.textAlign='center';ctx.textBaseline='middle';    // Love u লেখা
-  ctx.font='bold italic '+(b.r*.52).toFixed(1)+'px sans-serif';
-  ctx.fillText('Love u',x,y+b.r*.12);
-  ctx.textAlign='start';ctx.textBaseline='alphabetic';ctx.globalAlpha=1;}
+  const r=b.r,bw=r*2+20,bh=r*2.3+58,ox=r+10,oy=r*1.15+8;
+  const sp=sprite('bl'+b.id,bw,bh,()=>{
+    const by=oy+r*1.15,g=ctx.createRadialGradient(ox-r*.35,oy-r*.45,r*.1,ox,oy,r*1.3);
+    g.addColorStop(0,b.c[0]);g.addColorStop(1,b.c[1]);
+    ctx.strokeStyle='rgba(255,255,255,.55)';ctx.lineWidth=1;                       // সুতো
+    ctx.beginPath();ctx.moveTo(ox,by);ctx.bezierCurveTo(ox-6,by+14,ox+6,by+26,ox-2,by+42);ctx.stroke();
+    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(ox,oy,r,r*1.15,0,0,6.283);ctx.fill();
+    ctx.fillStyle=b.c[1];ctx.beginPath();ctx.moveTo(ox,by-1);ctx.lineTo(ox-3,by+4);ctx.lineTo(ox+3,by+4);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.55)';ctx.beginPath();
+    ctx.ellipse(ox-r*.4,oy-r*.55,r*.18,r*.3,.5,0,6.283);ctx.fill();
+    ctx.fillStyle=b.c[2];ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font='bold italic '+(r*.52).toFixed(1)+'px sans-serif';ctx.fillText('Love u',ox,oy+r*.12);});
+  ctx.globalAlpha=.92*clamp((t-b.st)/.8);ctx.drawImage(sp,x-ox,y-oy,bw,bh);ctx.globalAlpha=1;}
 function tier(cx,top,w,h,dy,al,t0,t1){
   ctx.globalAlpha=al;const x=cx-w/2,y=top+dy,ry=h*.28;
   const g=ctx.createLinearGradient(x,0,x+w,0);g.addColorStop(0,t0);g.addColorStop(.5,t1);g.addColorStop(1,t0);
@@ -181,42 +196,48 @@ function tier(cx,top,w,h,dy,al,t0,t1){
   ctx.fillStyle='#ffc2d4';ctx.beginPath();ctx.ellipse(cx,y,w/2,ry,0,0,6.283);ctx.fill();
   ctx.fillStyle='#ff9bb9';ctx.beginPath();ctx.ellipse(cx,y,w/2-6,ry-3,0,0,6.283);ctx.fill();
   ctx.globalAlpha=1;}
-function cake(t){
-  const cx=200,plateY=396;
-  const a0=clamp((t-2.2)/.5);if(a0<=0)return;
-  ctx.globalAlpha=a0;const gl=ctx.createRadialGradient(cx,plateY,10,cx,plateY,130);
+function plateSprite(){return sprite('plate',260,216,()=>{
+  const cx=200,plateY=396;ctx.translate(-70,-266);
+  const gl=ctx.createRadialGradient(cx,plateY,10,cx,plateY,130);
   gl.addColorStop(0,'rgba(255,200,110,.35)');gl.addColorStop(1,'rgba(255,200,110,0)');
   ctx.fillStyle=gl;ctx.fillRect(0,plateY-130,W,260);
   ctx.fillStyle='#b8860b';ctx.beginPath();ctx.ellipse(cx,plateY+4,108,16,0,0,6.283);ctx.fill();
-  ctx.fillStyle='#e8b64a';ctx.beginPath();ctx.ellipse(cx,plateY,108,15,0,0,6.283);ctx.fill();ctx.globalAlpha=1;
-  const drop=s=>{const p=clamp((t-s)/.9);return {dy:(1-bounce(p))*-260,al:clamp((t-s)/.25)};};
-  ctx.globalAlpha=a0;                                         // প্লেটের দুই পাশে ফুল-পাতা
+  ctx.fillStyle='#e8b64a';ctx.beginPath();ctx.ellipse(cx,plateY,108,15,0,0,6.283);ctx.fill();
   [-1,1].forEach(s=>{const fx=cx+s*92;ctx.fillStyle='#6fcf8f';
     ctx.beginPath();ctx.ellipse(fx-s*12,plateY-1,9,3.5,s*.4,0,6.283);ctx.fill();
     ctx.beginPath();ctx.ellipse(fx+s*12,plateY+1,9,3.5,-s*.4,0,6.283);ctx.fill();
     flower(fx,plateY-3,9,s<0?'#ffffff':'#ffd0e0','#ffcf4a');
-    ctx.fillStyle='#ff3f7f';heart(fx-s*24,plateY-2,6);ctx.fill();});
+    ctx.fillStyle='#ff3f7f';heart(fx-s*24,plateY-2,6);ctx.fill();});});}
+function tierSprite(i){return sprite('tier'+i,260,190,()=>{
+  const cx=200;ctx.translate(-70,-250);
+  if(i===0){tier(cx,352,150,42,0,1,'#e9588a','#ff86ae');deco(cx,352,150,42,0,1,7,7.5);}
+  else if(i===1){tier(cx,318,106,34,0,1,'#d94f86','#ff7fae');deco(cx,318,106,34,0,1,5,6);}
+  else{tier(cx,290,66,28,0,1,'#e9588a','#ff86ae');deco(cx,290,66,28,0,1,3,5);
+    flower(cx-22,290,5,'#ffffff','#ffcf4a');flower(cx+22,290,5,'#ffd0e0','#ffcf4a');
+    ctx.fillStyle='#ff3f7f';heart(cx-11,293,4);ctx.fill();heart(cx+11,293,4);ctx.fill();}});}
+function cake(t){
+  const cx=200,a0=clamp((t-2.2)/.5);if(a0<=0)return;
+  ctx.globalAlpha=a0;ctx.drawImage(plateSprite(),70,266,260,216);
+  [2.2,2.9,3.5].forEach((st,i)=>{
+    const p=clamp((t-st)/.9),al=clamp((t-st)/.25);if(al<=0)return;
+    ctx.globalAlpha=al;ctx.drawImage(tierSprite(i),70,250+(i?(1-bounce(p))*-260:0),260,190);});
   ctx.globalAlpha=1;
-  let d=drop(2.2);tier(cx,352,150,42,0,d.al,'#e9588a','#ff86ae');deco(cx,352,150,42,0,d.al,7,7.5);
-  d=drop(2.9);tier(cx,318,106,34,d.dy,d.al,'#d94f86','#ff7fae');deco(cx,318,106,34,d.dy,d.al,5,6);
-  d=drop(3.5);tier(cx,290,66,28,d.dy,d.al,'#e9588a','#ff86ae');deco(cx,290,66,28,d.dy,d.al,3,5);
-  {const ty=290+d.dy;ctx.globalAlpha=d.al;                    // উপরের স্তরে ফুল ও হার্ট
-   flower(cx-22,ty,5,'#ffffff','#ffcf4a');flower(cx+22,ty,5,'#ffd0e0','#ffcf4a');
-   ctx.fillStyle='#ff3f7f';heart(cx-11,ty+3,4);ctx.fill();heart(cx+11,ty+3,4);ctx.fill();ctx.globalAlpha=1;}
-  if(t>4.3){const a=clamp((t-4.3)/.4);ctx.globalAlpha=a;
+  if(t>4.3){const a=clamp((t-4.3)/.4),f=1+Math.sin(t*14)*.12;ctx.globalAlpha=a;
     ctx.fillStyle='#fff';ctx.fillRect(cx-2.5,266,5,24);
-    const f=1+Math.sin(t*14)*.12;ctx.fillStyle='#ffb347';ctx.shadowColor='#ffcf70';ctx.shadowBlur=14;
-    ctx.beginPath();ctx.ellipse(cx,258,4*f,9*f,0,0,6.283);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;}
+    ctx.fillStyle='rgba(255,207,112,.28)';ctx.beginPath();ctx.arc(cx,258,14*f,0,6.283);ctx.fill();
+    ctx.fillStyle='#ffb347';ctx.beginPath();ctx.ellipse(cx,258,4*f,9*f,0,0,6.283);ctx.fill();ctx.globalAlpha=1;}
 }
 function title(t){
   const p=clamp((t-5.2)/3.2);if(p<=0)return;
-  ctx.save();ctx.font="70px 'Great Vibes',cursive";ctx.textBaseline='alphabetic';
-  const txt='Happy Birthday',w=ctx.measureText(txt).width,x=(W-w)/2,y=96;
-  ctx.save();
-  ctx.beginPath();ctx.rect(x-10,y-80,(w+20)*easeOut(p),130);ctx.clip();
-  ctx.shadowColor='rgba(255,215,140,.9)';ctx.shadowBlur=16;ctx.fillStyle='#fff6e0';ctx.fillText(txt,x,y);
-  ctx.shadowBlur=0;ctx.lineWidth=1;ctx.strokeStyle='rgba(255,230,170,.8)';ctx.strokeText(txt,x,y);
-  ctx.restore();
+  ctx.save();ctx.textBaseline='alphabetic';
+  const y=96,sp=sprite('hb',W-20,130,()=>{
+    ctx.font="70px 'Great Vibes','Brush Script MT',cursive";
+    const txt='Happy Birthday',w=ctx.measureText(txt).width,x=(W-20-w)/2;
+    ctx.shadowColor='rgba(255,215,140,.9)';ctx.shadowBlur=16;ctx.fillStyle='#fff6e0';ctx.fillText(txt,x,80);
+    ctx.shadowBlur=0;ctx.lineWidth=1;ctx.strokeStyle='rgba(255,230,170,.8)';ctx.strokeText(txt,x,80);
+    return {x:x,w:w};});
+  const cw0=Math.min(W-20,sp.meta.x-12+(sp.meta.w+24)*easeOut(p));
+  if(cw0>0)ctx.drawImage(sp,0,0,Math.min(sp.width,Math.round(cw0*PX)),sp.height,10,y-80,cw0,130);
   // নাম — অক্ষর একটা একটা করে লাফিয়ে ফোটে
   if(t>NAME_T0){
     const nfont=px=>px+"px 'Great Vibes','Brush Script MT',cursive";
@@ -229,10 +250,12 @@ function title(t){
       const e=pp-1,sc=1+2.70158*e*e*e+1.70158*e*e;                 // ওভারশুট বাউন্স
       ctx.save();ctx.globalAlpha=clamp(pp*2.5);
       ctx.translate(nx+off+cw/2,ny-(1-pp)*22);ctx.scale(sc,sc);ctx.translate(-cw/2,0);
-      ctx.lineWidth=7;ctx.strokeStyle='#3b0a26';ctx.shadowBlur=0;ctx.strokeText(ch,0,0);   // গাঢ় আউটলাইন
-      const ng=ctx.createLinearGradient(0,-nf*.7,0,nf*.15);
-      ng.addColorStop(0,'#fffbd0');ng.addColorStop(.5,'#ffd23f');ng.addColorStop(1,'#ff9a1f');
-      ctx.shadowColor='rgba(255,200,60,.95)';ctx.shadowBlur=20;ctx.fillStyle=ng;ctx.fillText(ch,0,0);
+      const ls=sprite('nl:'+ch+':'+nf,cw+44,nf*1.9,()=>{
+        ctx.font=nfont(nf);ctx.lineJoin='round';ctx.lineWidth=7;ctx.strokeStyle='#3b0a26';ctx.strokeText(ch,22,nf*1.3);
+        const ng=ctx.createLinearGradient(0,nf*.6,0,nf*1.45);
+        ng.addColorStop(0,'#fffbd0');ng.addColorStop(.5,'#ffd23f');ng.addColorStop(1,'#ff9a1f');
+        ctx.shadowColor='rgba(255,200,60,.95)';ctx.shadowBlur=20;ctx.fillStyle=ng;ctx.fillText(ch,22,nf*1.3);});
+      ctx.drawImage(ls,-22,-nf*1.3,cw+44,nf*1.9);
       ctx.restore();});
     ctx.textAlign='start';}
   drawMessage(t);
@@ -264,8 +287,7 @@ function layoutMsg(){
     if(h<=PANEL.h-32)break;}
   return res;}
 let LAY=null;
-function getLay(){if(LAY)return LAY;const r=layoutMsg();
-  if(!document.fonts||document.fonts.status==='loaded')LAY=r;return r;}
+function getLay(){return LAY||(LAY=layoutMsg());}
 function drawMessage(t){
   if(t<MSG_T0-.6)return;
   const L=getLay(),pa=clamp((t-(MSG_T0-.6))/.6);
@@ -284,14 +306,14 @@ function drawMessage(t){
   ctx.restore();}
 
 // ---------- তারার ঝিলিক ----------
-const stars=Array.from({length:46},()=>({x:rnd(),y:rnd()*.85,r:1.5+rnd()*3,ph:rnd()*6.28,g:rnd()>.5}));
+const stars=Array.from({length:34},()=>({x:rnd(),y:rnd()*.85,r:1.5+rnd()*3,ph:rnd()*6.28,g:rnd()>.5}));
 function twinkle(t,k){stars.forEach(s=>{const f=Math.abs(Math.sin(t*2.2+s.ph));
   ctx.globalAlpha=(.25+.75*f)*k;ctx.fillStyle=s.g?'#ffe9a8':'#ffffff';sparkle(s.x*VW,s.y*VH,s.r*(.7+.5*f));});
   ctx.globalAlpha=1;}
 
 // ---------- কনফেটি ----------
 const confCols=['#ff5c8a','#ffd45e','#6fcf8f','#6ec6ff','#c28bff','#ffffff','#ff9f6b'];
-const confetti=Array.from({length:90},()=>({x:rnd(),st:7.6+rnd()*1.8,v:70+rnd()*90,sw:10+rnd()*20,ph:rnd()*6.28,
+const confetti=Array.from({length:70},()=>({x:rnd(),st:7.6+rnd()*1.8,v:70+rnd()*90,sw:10+rnd()*20,ph:rnd()*6.28,
   w:5+rnd()*5,h:3+rnd()*4,rot:rnd()*6.28,rs:2+rnd()*6,c:confCols[(rnd()*7)|0]}));
 function drawConfetti(t){confetti.forEach(c=>{if(t<c.st)return;const tt=t-c.st,y=-14+tt*c.v;if(y>VH+14)return;
   ctx.save();ctx.translate(c.x*VW+Math.sin(tt*2+c.ph)*c.sw,y);ctx.rotate(c.rot+tt*c.rs);
@@ -361,14 +383,13 @@ function playMusic(){
 // ---------- স্থায়ী ক্রেডিট (সবসময় নিচে দেখা যাবে) ----------
 function credit(){
   const cx=VW/2,by=VH-22;
-  ctx.save();ctx.textAlign='center';ctx.textBaseline='alphabetic';
-  ctx.font="600 12px 'Hind Siliguri',system-ui,sans-serif";
-  const txt='Created by Muhammad Abid Hakim',w=ctx.measureText(txt).width;
-  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(cx-w/2-22,by-15,w+44,21);
-  ctx.shadowColor='rgba(0,0,0,.6)';ctx.shadowBlur=3;ctx.fillStyle='rgba(255,236,200,.96)';
-  ctx.fillText(txt,cx,by);ctx.shadowBlur=0;
-  ctx.fillStyle='#ff6f9c';heart(cx-w/2-10,by-4,4);ctx.fill();heart(cx+w/2+10,by-4,4);ctx.fill();
-  ctx.restore();}
+  const sp=sprite('cr',300,30,()=>{
+    ctx.textAlign='center';ctx.font="600 12px 'Hind Siliguri',system-ui,sans-serif";
+    const txt='Created by Muhammad Abid Hakim',w=ctx.measureText(txt).width;
+    ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(150-w/2-22,6,w+44,21);
+    ctx.shadowColor='rgba(0,0,0,.6)';ctx.shadowBlur=3;ctx.fillStyle='rgba(255,236,200,.96)';ctx.fillText(txt,150,21);
+    ctx.shadowBlur=0;ctx.fillStyle='#ff6f9c';heart(150-w/2-10,17,4);ctx.fill();heart(150+w/2+10,17,4);ctx.fill();});
+  ctx.drawImage(sp,cx-150,by-21,300,30);}
 
 // ---------- main loop ----------
 let t0=performance.now(),last=0;
@@ -389,10 +410,7 @@ function draw(now){
   const t=((now-t0)/1000)%TOTAL, k=clamp((t-1.6)/.7);
   if(t<last)playMusic();last=t;   // লুপ ঘুরলে সুরও নতুন করে শুরু
   ctx.setTransform(cv.width/VW,0,0,cv.height/VH,0,0);
-  ctx.clearRect(0,0,VW,VH);
   ctx.fillStyle=mix([10,10,46],[74,14,52],k);ctx.fillRect(0,0,VW,VH);
-  const v=ctx.createRadialGradient(VW/2,VH*.6,60,VW/2,VH*.6,Math.max(330,Math.max(VW,VH)*.7));
-  v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.45)');ctx.fillStyle=v;ctx.fillRect(0,0,VW,VH);
   ctx.save();ctx.translate(OX,OY);scene1(t);ctx.restore();
   if(t>1.8){twinkle(t,k);floatingHearts(t);balloons.forEach(b=>balloon(b,t));
     if(t>9.5)fireworks(t);
